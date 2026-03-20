@@ -1,0 +1,12 @@
+{
+  "version": 2,
+  "routes": [
+    { "src": "/api/dashboard", "dest": "/api/dashboard.js" },
+    { "src": "/api/scanner",   "dest": "/api/scanner.js"   },
+    { "src": "/api/calendar",  "dest": "/api/calendar.js"  },
+    { "src": "/api/alerts",    "dest": "/api/alerts.js"    },
+    { "src": "/sw.js",         "dest": "/sw.js",           "headers": { "Cache-Control": "no-cache" } },
+    { "src": "/manifest.json", "dest": "/manifest.json"    },
+    { "src": "/(.*)",          "dest": "/index.html"       }
+  ]
+}
