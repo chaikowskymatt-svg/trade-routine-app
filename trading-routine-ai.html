@@ -1,0 +1,1322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trade Routine AI</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#07090f;--s1:#0d1018;--s2:#111520;--s3:#161c2a;
+  --border:#1c2236;--border2:#242e48;
+  --gold:#e8b84b;--gold2:#f5d47a;
+  --green:#3de8a0;--red:#e84b6a;--blue:#4b8fe8;
+  --text:#d8e2f4;--muted:#4a5870;--dim:#1a2135;
+  --font-head:'Bebas Neue',sans-serif;
+  --font-mono:'Space Mono',monospace;
+  --font-body:'Syne',sans-serif;
+}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:var(--font-body);font-size:13px;min-height:100vh;overflow-x:hidden}
+
+/* NOISE OVERLAY */
+body::after{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");pointer-events:none;z-index:9999}
+
+/* HEADER */
+header{position:sticky;top:0;z-index:100;background:rgba(7,9,15,0.94);backdrop-filter:blur(14px);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 20px;height:52px}
+.logo{font-family:var(--font-head);font-size:20px;letter-spacing:4px;color:var(--gold)}
+.logo span{color:var(--muted);font-size:14px;letter-spacing:2px;margin-left:6px}
+.header-right{display:flex;align-items:center;gap:10px}
+.pill{font-family:var(--font-mono);font-size:10px;color:var(--muted);background:var(--s2);border:1px solid var(--border);padding:3px 9px;border-radius:3px}
+.pill.live{color:var(--green);border-color:rgba(61,232,160,0.25)}
+.pill.live::before{content:'● ';font-size:8px}
+
+/* TABS */
+.tabs{display:flex;gap:0;border-bottom:1px solid var(--border);background:var(--s1);padding:0 20px;overflow-x:auto}
+.tab{font-family:var(--font-mono);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;padding:12px 16px;border:none;background:none;color:var(--muted);cursor:pointer;white-space:nowrap;position:relative;transition:color .2s}
+.tab::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;background:var(--gold);transform:scaleX(0);transform-origin:left;transition:transform .2s}
+.tab.active{color:var(--gold)}
+.tab.active::after{transform:scaleX(1)}
+.tab:hover:not(.active){color:var(--text)}
+
+/* LAYOUT */
+.main{max-width:1080px;margin:0 auto;padding:24px 20px 80px;position:relative;z-index:1}
+.panel{display:none}
+.panel.active{display:block;animation:fadeUp .2s ease}
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+/* DASHBOARD GRID */
+.dash-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px}
+@media(max-width:700px){.dash-grid{grid-template-columns:repeat(2,1fr)}}
+
+/* MARKET CARD */
+.mkt-card{background:var(--s2);border:1px solid var(--border);border-radius:6px;padding:12px 14px;position:relative;overflow:hidden;cursor:pointer;transition:border-color .2s}
+.mkt-card:hover{border-color:var(--border2)}
+.mkt-card.loading{opacity:.5}
+.mkt-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px}
+.mkt-card.bull::before{background:var(--green)}
+.mkt-card.bear::before{background:var(--red)}
+.mkt-card.neutral::before{background:var(--muted)}
+.mkt-ticker{font-family:var(--font-mono);font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:4px}
+.mkt-price{font-family:var(--font-head);font-size:26px;letter-spacing:1px;line-height:1;margin-bottom:4px}
+.mkt-change{font-family:var(--font-mono);font-size:11px}
+.mkt-change.pos{color:var(--green)}
+.mkt-change.neg{color:var(--red)}
+.mkt-rsi-row{display:flex;align-items:center;gap:8px;margin-top:8px}
+.rsi-badge{font-family:var(--font-mono);font-size:9px;padding:2px 6px;border-radius:2px;font-weight:700}
+.rsi-badge.oversold{background:rgba(61,232,160,.15);color:var(--green)}
+.rsi-badge.neutral{background:rgba(232,184,75,.15);color:var(--gold)}
+.rsi-badge.overbought{background:rgba(232,75,106,.15);color:var(--red)}
+.rsi-num{font-family:var(--font-mono);font-size:10px;color:var(--muted)}
+
+/* REFRESH BTN */
+.refresh-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.refresh-btn{font-family:var(--font-mono);font-size:10px;color:var(--muted);background:var(--s2);border:1px solid var(--border);padding:5px 12px;border-radius:3px;cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:6px}
+.refresh-btn:hover{color:var(--gold);border-color:var(--gold)}
+.refresh-btn.spinning .spin-icon{animation:spin .8s linear infinite}
+@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+.last-updated{font-family:var(--font-mono);font-size:10px;color:var(--muted)}
+
+/* AI STRATEGY CARD */
+.strategy-card{background:var(--s2);border:1px solid var(--border);border-radius:6px;padding:16px 18px;margin-bottom:20px;position:relative;overflow:hidden}
+.strategy-card::before{content:'AI STRATEGY';position:absolute;top:12px;right:14px;font-family:var(--font-mono);font-size:8px;color:var(--gold);letter-spacing:2px;opacity:.5}
+.strategy-title{font-family:var(--font-head);font-size:18px;letter-spacing:2px;color:var(--gold);margin-bottom:10px}
+.strategy-body{font-size:13px;line-height:1.7;color:var(--text)}
+.strategy-body.loading{color:var(--muted);font-style:italic}
+.strategy-tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.stag{font-family:var(--font-mono);font-size:9px;padding:3px 8px;border-radius:2px;letter-spacing:.5px}
+.stag.green{background:rgba(61,232,160,.12);color:var(--green);border:1px solid rgba(61,232,160,.2)}
+.stag.red{background:rgba(232,75,106,.12);color:var(--red);border:1px solid rgba(232,75,106,.2)}
+.stag.gold{background:rgba(232,184,75,.12);color:var(--gold);border:1px solid rgba(232,184,75,.2)}
+
+/* SECTION */
+.section{background:var(--s1);border:1px solid var(--border);border-radius:6px;margin-bottom:14px;overflow:hidden}
+.section-hdr{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;cursor:pointer;transition:background .15s;border-bottom:1px solid var(--border)}
+.section-hdr:hover{background:var(--s2)}
+.section-hdr-left{display:flex;align-items:center;gap:10px}
+.section-hdr-icon{font-size:14px}
+.section-hdr-title{font-family:var(--font-head);font-size:16px;letter-spacing:1.5px}
+.chevron{color:var(--muted);transition:transform .2s;font-size:10px}
+.section.collapsed .chevron{transform:rotate(-90deg)}
+.section.collapsed .section-body{display:none}
+.section-body{padding:4px 0}
+
+/* ECON CALENDAR */
+.econ-item{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid rgba(28,34,54,.6)}
+.econ-item:last-child{border-bottom:none}
+.econ-time{font-family:var(--font-mono);font-size:10px;color:var(--muted);min-width:50px}
+.econ-impact{width:6px;height:6px;border-radius:50%;min-width:6px}
+.econ-impact.high{background:var(--red)}
+.econ-impact.medium{background:var(--gold)}
+.econ-impact.low{background:var(--muted)}
+.econ-name{flex:1;font-size:12px}
+.econ-forecast{font-family:var(--font-mono);font-size:10px;color:var(--muted)}
+.econ-loading{padding:16px;font-family:var(--font-mono);font-size:11px;color:var(--muted);text-align:center}
+
+/* SCANNER */
+.scanner-header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border)}
+.ticker-input-row{display:flex;gap:8px;padding:12px 16px;border-bottom:1px solid var(--border)}
+.ticker-input{background:var(--s3);border:1px solid var(--border2);border-radius:3px;color:var(--text);font-family:var(--font-mono);font-size:11px;padding:6px 10px;flex:1;outline:none;text-transform:uppercase}
+.ticker-input::placeholder{color:var(--muted)}
+.ticker-input:focus{border-color:var(--gold)}
+.add-btn{background:var(--gold);color:#07090f;font-family:var(--font-mono);font-size:10px;font-weight:700;border:none;padding:6px 14px;border-radius:3px;cursor:pointer;transition:opacity .15s;letter-spacing:1px}
+.add-btn:hover{opacity:.85}
+.watchlist-pills{display:flex;flex-wrap:wrap;gap:6px;padding:10px 16px;border-bottom:1px solid var(--border);min-height:42px}
+.w-pill{font-family:var(--font-mono);font-size:10px;background:var(--s3);border:1px solid var(--border2);color:var(--text);padding:3px 8px;border-radius:3px;display:flex;align-items:center;gap:5px;cursor:default}
+.w-pill-del{color:var(--muted);cursor:pointer;font-size:11px;line-height:1}
+.w-pill-del:hover{color:var(--red)}
+.scan-btn{background:none;border:1px solid var(--gold);color:var(--gold);font-family:var(--font-mono);font-size:10px;padding:5px 14px;border-radius:3px;cursor:pointer;letter-spacing:1px;transition:all .15s}
+.scan-btn:hover{background:rgba(232,184,75,.1)}
+.scan-table{width:100%;border-collapse:collapse}
+.scan-table th{font-family:var(--font-mono);font-size:9px;letter-spacing:1px;color:var(--muted);text-transform:uppercase;padding:8px 16px;text-align:left;border-bottom:1px solid var(--border);background:var(--s2)}
+.scan-table td{padding:10px 16px;border-bottom:1px solid rgba(28,34,54,.5);font-size:12px;vertical-align:middle}
+.scan-table tr:last-child td{border-bottom:none}
+.scan-table tr:hover td{background:var(--s2)}
+.scan-ticker{font-family:var(--font-mono);font-size:11px;font-weight:700;color:var(--gold)}
+.scan-price{font-family:var(--font-mono);font-size:11px}
+.scan-chg{font-family:var(--font-mono);font-size:11px;font-weight:700}
+.scan-chg.pos{color:var(--green)}
+.scan-chg.neg{color:var(--red)}
+.scan-rsi{font-family:var(--font-mono);font-size:10px}
+.scan-signal{font-size:11px;font-weight:600}
+.flag-row{display:flex;flex-wrap:wrap;gap:4px}
+.flag{font-family:var(--font-mono);font-size:8px;padding:2px 5px;border-radius:2px}
+.flag.csp{background:rgba(61,232,160,.12);color:var(--green);border:1px solid rgba(61,232,160,.2)}
+.flag.cc{background:rgba(75,143,232,.12);color:var(--blue);border:1px solid rgba(75,143,232,.2)}
+.flag.alert{background:rgba(232,75,106,.12);color:var(--red);border:1px solid rgba(232,75,106,.2)}
+.flag.watch{background:rgba(232,184,75,.12);color:var(--gold);border:1px solid rgba(232,184,75,.2)}
+.scan-empty{padding:24px;text-align:center;font-family:var(--font-mono);font-size:11px;color:var(--muted)}
+
+/* CHECKLIST */
+.c-item{display:flex;align-items:flex-start;gap:10px;padding:9px 16px;cursor:pointer;transition:background .1s;border-left:3px solid transparent}
+.c-item:hover{background:var(--s2)}
+.c-item.done{border-left-color:var(--green);opacity:.45}
+.c-item.done .c-text{text-decoration:line-through;color:var(--muted)}
+.c-box{width:15px;height:15px;min-width:15px;border:1.5px solid var(--dim);border-radius:2px;margin-top:1px;display:flex;align-items:center;justify-content:center;transition:all .15s}
+.c-item.done .c-box{background:var(--green);border-color:var(--green)}
+.c-check{color:#07090f;font-size:9px;display:none}
+.c-item.done .c-check{display:block}
+.c-text{flex:1;line-height:1.5;font-size:12px}
+.c-sub{padding:7px 16px 7px 44px;display:flex;align-items:flex-start;gap:10px;cursor:pointer;transition:background .1s;border-left:3px solid transparent}
+.c-sub:hover{background:var(--s2)}
+.c-sub.done{border-left-color:var(--green);opacity:.4}
+.c-sub.done .c-text{text-decoration:line-through;color:var(--muted)}
+.c-note{margin:2px 16px 10px 44px;padding:7px 10px;border-left:2px solid var(--dim);background:var(--s3);border-radius:0 3px 3px 0;font-family:var(--font-mono);font-size:10px;color:var(--muted);line-height:1.6}
+
+/* FOOTER */
+.footer{position:fixed;bottom:0;left:0;right:0;z-index:100;background:rgba(7,9,15,.96);backdrop-filter:blur(10px);border-top:1px solid var(--border);padding:8px 20px;display:flex;align-items:center;gap:14px}
+.footer-label{font-family:var(--font-mono);font-size:9px;color:var(--muted);letter-spacing:1px;white-space:nowrap}
+.footer-bar{flex:1;height:3px;background:var(--dim);border-radius:2px;overflow:hidden}
+.footer-fill{height:100%;background:linear-gradient(90deg,var(--green),var(--gold));border-radius:2px;transition:width .4s ease}
+.footer-pct{font-family:var(--font-head);font-size:22px;color:var(--gold);line-height:1}
+.footer-reset{font-family:var(--font-mono);font-size:9px;color:var(--muted);background:none;border:1px solid var(--border);padding:4px 10px;border-radius:3px;cursor:pointer;transition:all .15s;letter-spacing:1px}
+.footer-reset:hover{color:var(--red);border-color:var(--red)}
+
+/* SPINNER */
+.spinner{display:inline-block;width:12px;height:12px;border:2px solid var(--border2);border-top-color:var(--gold);border-radius:50%;animation:spin .7s linear infinite}
+
+/* STREAM TEXT */
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+.cursor{display:inline-block;width:6px;height:12px;background:var(--gold);animation:blink 1s step-end infinite;vertical-align:middle;margin-left:2px}
+
+/* HOLDINGS */
+.h-toolbar{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border)}
+.h-toolbar-title{font-family:var(--font-head);font-size:16px;letter-spacing:1.5px}
+.h-add-btn{font-family:var(--font-mono);font-size:10px;background:var(--gold);color:#07090f;border:none;padding:5px 13px;border-radius:3px;cursor:pointer;letter-spacing:1px;font-weight:700;transition:opacity .15s}
+.h-add-btn:hover{opacity:.85}
+.h-table{width:100%;border-collapse:collapse}
+.h-table th{font-family:var(--font-mono);font-size:9px;letter-spacing:1px;color:var(--muted);text-transform:uppercase;padding:8px 14px;text-align:left;border-bottom:1px solid var(--border);background:var(--s2);white-space:nowrap}
+.h-table td{padding:10px 14px;border-bottom:1px solid rgba(28,34,54,.5);font-size:12px;vertical-align:middle}
+.h-table tr:last-child td{border-bottom:none}
+.h-table tr:hover td{background:var(--s2)}
+.h-ticker{font-family:var(--font-mono);font-size:12px;font-weight:700;color:var(--gold)}
+.h-type-badge{font-family:var(--font-mono);font-size:8px;padding:2px 6px;border-radius:2px;letter-spacing:.5px}
+.h-type-stock{background:rgba(75,143,232,.15);color:var(--blue);border:1px solid rgba(75,143,232,.25)}
+.h-type-csp{background:rgba(61,232,160,.12);color:var(--green);border:1px solid rgba(61,232,160,.2)}
+.h-type-cc{background:rgba(232,184,75,.12);color:var(--gold);border:1px solid rgba(232,184,75,.2)}
+.h-pnl{font-family:var(--font-mono);font-size:11px;font-weight:700}
+.h-pnl.pos{color:var(--green)}
+.h-pnl.neg{color:var(--red)}
+.h-pnl.flat{color:var(--muted)}
+.h-actions{display:flex;gap:6px}
+.h-btn{font-family:var(--font-mono);font-size:9px;padding:3px 8px;border-radius:2px;cursor:pointer;border:1px solid var(--border);background:none;color:var(--muted);transition:all .15s;letter-spacing:.5px}
+.h-btn:hover{color:var(--text);border-color:var(--border2)}
+.h-btn.del:hover{color:var(--red);border-color:var(--red)}
+.h-empty{padding:32px;text-align:center;font-family:var(--font-mono);font-size:11px;color:var(--muted);line-height:2}
+.h-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px}
+@media(max-width:600px){.h-summary{grid-template-columns:1fr 1fr}}
+.h-sum-card{background:var(--s2);border:1px solid var(--border);border-radius:6px;padding:10px 14px}
+.h-sum-label{font-family:var(--font-mono);font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:4px}
+.h-sum-val{font-family:var(--font-head);font-size:22px;letter-spacing:1px}
+
+/* MODAL */
+.modal-overlay{position:fixed;inset:0;background:rgba(7,9,15,.85);z-index:500;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px)}
+.modal-overlay.hidden{display:none}
+.modal{background:var(--s2);border:1px solid var(--border2);border-radius:8px;padding:24px;width:420px;max-width:95vw;position:relative}
+.modal-title{font-family:var(--font-head);font-size:20px;letter-spacing:2px;color:var(--gold);margin-bottom:18px}
+.modal-close{position:absolute;top:14px;right:14px;background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;line-height:1}
+.modal-close:hover{color:var(--text)}
+.form-group{margin-bottom:14px}
+.form-label{font-family:var(--font-mono);font-size:9px;letter-spacing:1px;color:var(--muted);display:block;margin-bottom:5px;text-transform:uppercase}
+.form-input{width:100%;background:var(--s3);border:1px solid var(--border2);border-radius:3px;color:var(--text);font-family:var(--font-mono);font-size:11px;padding:7px 10px;outline:none;transition:border-color .15s}
+.form-input:focus{border-color:var(--gold)}
+.form-input::placeholder{color:var(--muted)}
+.form-select{width:100%;background:var(--s3);border:1px solid var(--border2);border-radius:3px;color:var(--text);font-family:var(--font-mono);font-size:11px;padding:7px 10px;outline:none;cursor:pointer}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.form-actions{display:flex;gap:8px;margin-top:20px}
+.form-save{flex:1;background:var(--gold);color:#07090f;font-family:var(--font-mono);font-size:11px;font-weight:700;border:none;padding:9px;border-radius:3px;cursor:pointer;letter-spacing:1px;transition:opacity .15s}
+.form-save:hover{opacity:.85}
+.form-cancel{background:none;border:1px solid var(--border);color:var(--muted);font-family:var(--font-mono);font-size:11px;padding:9px 16px;border-radius:3px;cursor:pointer;transition:all .15s}
+.form-cancel:hover{color:var(--text);border-color:var(--border2)}
+.type-tabs{display:flex;gap:4px;margin-bottom:16px}
+.type-tab{flex:1;font-family:var(--font-mono);font-size:9px;letter-spacing:1px;padding:6px;border:1px solid var(--border);background:none;color:var(--muted);cursor:pointer;border-radius:3px;transition:all .15s;text-transform:uppercase}
+.type-tab.active.stock{background:rgba(75,143,232,.15);color:var(--blue);border-color:rgba(75,143,232,.3)}
+.type-tab.active.csp{background:rgba(61,232,160,.12);color:var(--green);border-color:rgba(61,232,160,.25)}
+.type-tab.active.cc{background:rgba(232,184,75,.12);color:var(--gold);border-color:rgba(232,184,75,.25)}
+.csp-fields,.cc-fields,.stock-fields{display:none}
+.csp-fields.show,.cc-fields.show,.stock-fields.show{display:block}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">TRADE ROUTINE <span>AI</span></div>
+  <div class="header-right">
+    <div class="pill live" id="liveStatus">READY</div>
+    <div class="pill" id="datePill"></div>
+  </div>
+</header>
+
+<div class="tabs">
+  <button class="tab active" data-panel="dashboard" onclick="switchTab(this)">DASHBOARD</button>
+  <button class="tab" data-panel="holdings" onclick="switchTab(this)">HOLDINGS</button>
+  <button class="tab" data-panel="scanner" onclick="switchTab(this)">SCANNER</button>
+  <button class="tab" data-panel="checklist" onclick="switchTab(this)">CHECKLIST</button>
+  <button class="tab" data-panel="weekly" onclick="switchTab(this)">WEEKLY</button>
+</div>
+
+<div class="main">
+
+  <!-- ===== DASHBOARD ===== -->
+  <div class="panel active" id="panel-dashboard">
+
+    <div class="refresh-row">
+      <div class="last-updated" id="lastUpdated">Not yet loaded</div>
+      <button class="refresh-btn" id="refreshBtn" onclick="loadAll()">
+        <span class="spin-icon">↻</span> REFRESH ALL
+      </button>
+    </div>
+
+    <!-- MARKET CARDS -->
+    <div class="dash-grid" id="mktGrid">
+      <div class="mkt-card neutral loading" id="card-SPY"><div class="mkt-ticker">SPY</div><div class="mkt-price">—</div><div class="mkt-change">Loading…</div></div>
+      <div class="mkt-card neutral loading" id="card-QQQ"><div class="mkt-ticker">QQQ</div><div class="mkt-price">—</div><div class="mkt-change">Loading…</div></div>
+      <div class="mkt-card neutral loading" id="card-VIX"><div class="mkt-ticker">VIX</div><div class="mkt-price">—</div><div class="mkt-change">Loading…</div></div>
+      <div class="mkt-card neutral loading" id="card-BTC"><div class="mkt-ticker">BTC</div><div class="mkt-price">—</div><div class="mkt-change">Loading…</div></div>
+    </div>
+
+    <!-- AI STRATEGY -->
+    <div class="strategy-card">
+      <div class="strategy-title">TODAY'S STRATEGY</div>
+      <div class="strategy-body loading" id="strategyBody">Loading market data to generate your strategy…<span class="cursor"></span></div>
+      <div class="strategy-tags" id="strategyTags"></div>
+    </div>
+
+    <!-- ECON CALENDAR -->
+    <div class="section" id="s-econ">
+      <div class="section-hdr" onclick="toggleSec('s-econ')">
+        <div class="section-hdr-left"><span class="section-hdr-icon">📅</span><span class="section-hdr-title">ECONOMIC CALENDAR TODAY</span></div>
+        <span class="chevron">▾</span>
+      </div>
+      <div class="section-body" id="econBody">
+        <div class="econ-loading"><span class="spinner"></span>  Fetching events…</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ===== HOLDINGS ===== -->
+  <div class="panel" id="panel-holdings">
+
+    <!-- Summary cards -->
+    <div class="h-summary" id="holdingsSummary"></div>
+
+    <!-- Stocks -->
+    <div class="section" id="s-h-stocks" style="margin-bottom:14px">
+      <div class="h-toolbar">
+        <span class="h-toolbar-title">📈 STOCK POSITIONS</span>
+        <button class="h-add-btn" onclick="openModal('stock')">+ ADD STOCK</button>
+      </div>
+      <div style="overflow-x:auto">
+        <table class="h-table"><thead><tr>
+          <th>TICKER</th><th>SHARES</th><th>COST BASIS</th><th>CURRENT</th><th>P&L %</th><th>NOTES</th><th></th>
+        </tr></thead>
+        <tbody id="stocksBody"></tbody></table>
+      </div>
+    </div>
+
+    <!-- CSPs -->
+    <div class="section" id="s-h-csps" style="margin-bottom:14px">
+      <div class="h-toolbar">
+        <span class="h-toolbar-title">💰 CASH-SECURED PUTS</span>
+        <button class="h-add-btn" onclick="openModal('csp')">+ ADD CSP</button>
+      </div>
+      <div style="overflow-x:auto">
+        <table class="h-table"><thead><tr>
+          <th>TICKER</th><th>STRIKE</th><th>EXPIRY</th><th>PREMIUM</th><th>COLLATERAL</th><th>P&L %</th><th>STATUS</th><th>NOTES</th><th></th>
+        </tr></thead>
+        <tbody id="cspsBody"></tbody></table>
+      </div>
+    </div>
+
+    <!-- CCs -->
+    <div class="section" id="s-h-ccs">
+      <div class="h-toolbar">
+        <span class="h-toolbar-title">📞 COVERED CALLS</span>
+        <button class="h-add-btn" onclick="openModal('cc')">+ ADD CC</button>
+      </div>
+      <div style="overflow-x:auto">
+        <table class="h-table"><thead><tr>
+          <th>TICKER</th><th>STRIKE</th><th>EXPIRY</th><th>PREMIUM</th><th>CONTRACTS</th><th>P&L %</th><th>STATUS</th><th>NOTES</th><th></th>
+        </tr></thead>
+        <tbody id="ccsBody"></tbody></table>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ===== SCANNER ===== -->
+  <div class="panel" id="panel-scanner">
+
+    <div class="section">
+      <div class="scanner-header">
+        <span style="font-family:var(--font-head);font-size:16px;letter-spacing:1.5px">WATCHLIST SCANNER</span>
+        <button class="scan-btn" onclick="runScan()">▶ RUN SCAN</button>
+      </div>
+      <div class="ticker-input-row">
+        <input class="ticker-input" id="tickerInput" placeholder="ADD TICKER (e.g. NVDA)" maxlength="8"
+          onkeydown="if(event.key==='Enter')addTicker()">
+        <button class="add-btn" onclick="addTicker()">+ ADD</button>
+      </div>
+      <div class="watchlist-pills" id="watchlistPills"></div>
+    </div>
+
+    <div id="scanResults">
+      <div class="section">
+        <div class="section-body">
+          <div class="scan-empty">Add tickers and click RUN SCAN to screen your watchlist</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ===== CHECKLIST ===== -->
+  <div class="panel" id="panel-checklist">
+
+    <div class="section" id="s-premarket">
+      <div class="section-hdr" onclick="toggleSec('s-premarket')">
+        <div class="section-hdr-left"><span class="section-hdr-icon">🌅</span><span class="section-hdr-title">PRE-MARKET</span></div>
+        <span class="chevron">▾</span>
+      </div>
+      <div class="section-body">
+        <div class="c-item" onclick="ck(this)"><div class="c-box"><span class="c-check">✓</span></div><div class="c-text">Check extended % change on TradingView Leverage ETF watchlist</div></div>
+        <div class="c-item" onclick="ck(this)"><div class="c-box"><span class="c-check">✓</span></div><div class="c-text">Check QQQ 30-min chart for market direction</div></div>
+        <div class="c-item" onclick="ck(this)"><div class="c-box"><span class="c-check">✓</span></div><div class="c-text">Check economic calendar — any market-moving events today? (see Dashboard)</div></div>
+        <div class="c-item" onclick="ck(this)"><div class="c-box"><span class="c-check">✓</span></div><div class="c-text">Check general market news (MarketWatch, Yahoo Finance, X)</div></div>
+        <div class="c-item" onclick="ck(this)"><div class="c-box"><span class="c-check">✓</span></div><div class="c-text">Check VIX trend (see Dashboard card)</div></div>
+        <div class="c-item" onclick="ck(this)"><div class="c-box"><span class="c-check">✓</span></div><div class="c-text">Check S5FD – S&P 500 futures direction</div></div>
+        <div class="c-item" onclick="ck(this)"><div class="c-box"><span class="c-check">✓</span></div><div class="c-text">Check Sector Tracker (1-week & 1-month) for rotations</div></div>
+        <div class="c-item" onclick="ck(this)"><div class="c-box"><span class="c-check">✓</span></div><div class="c-text">Check RSI on SPY, QQQ, BTC, VIX (see Dashboard)</div></div>
+        <div class="c-item" onclick="ck(this)"><div class="c-box"><span class="c-check">✓</span></div><div class="c-text">Any earnings today for stocks I own?</div></div>
+        <div class="c-item" onclick="ck(this)"><div class="c-box"><span class="c-check">✓</span></div><div class="c-text">Red day? → Run Scanner to find CSP candidates</div></div>
+      </div>
+    </div>
+
+    <div class="section" id="s-excsp">
+      <div class="section-hdr" onclick="toggleSec('s-excsp')">
+        <div class="section-hdr-left"><span class="section-hdr-icon">🔁</span><span class="section-hdr-title">EXISTING CSP POSITIONS</span></div>
+        <span class="chevron">▾</span>
+      </div>
+      <div class="section-body">
+        <div class="c-item" onclick="ck(this)"><div class="c-box"><span class="c-check">✓</span></div><div class="c-text">Any CSP at ≥50% profit? → Is remaining profit &lt;4-5%/month? → Close</div></div>
+        <div class="c-item" onclick="ck(this)"><div class="c-box"><span class="c-check">✓</span></div><div class="c-text">Any long-dated CSP (60+ DTE) at 20-30% profit in ≤3 days? → Close</div></div>
+        <div class="c-item" onclick="ck(this)"><div class="c-box"><span class="c-check">✓</span></div><div class="c-text">Any CSP at 7-12 DTE and NOT profitable? → Consider rolling or closing</div></div>
+        <div class="c-note">Remaining Profit % = (Remaining Premium / Collateral) × 30 / DTE × 100</div>
+        <div class="c-item" onclick="ck(this)"><div class="c-box"><span class="c-check">✓</span></div><div class="c-text">Any CSP in-the-money on Thu/Fri before expiry? → Roll or hold for assignment</div></div>
+      </div>
+    </div>
+
+    <div class="section" id="s-exstock">
+      <div class="section-hdr" onclick="toggleSec('s-exstock')">
+        <div class="section-hdr-left"><span class="section-hdr-icon">📈</span><span class="section-hdr-title">EXISTING STOCK POSITIONS</span></div>
+        <span class="chevron">▾</span>
+      </div>
+      <div class="section-body">
+        <div class="c-item" onclick="ck(this)"><div class="c-box"><span class="c-check">✓</span></div><div class="c-text">Any stock at 10/15/20% profit AND RSI ≥70 AND Stochastic 8hr crossing down? → Consider closing</div></div>
+        <div class="c-item" onclick="ck(this)"><div class="c-box"><span class="c-check">✓</span></div><div class="c-text">Any stock moving into negative with bearish outlook? → Confirm with WaveTrend → Consider closing</div></div>
+        <div class="c-item" onclick="ck(this)"><div class="c-box"><span class="c-check">✓</span></div><div class="c-text">Any stock moved from negative to breakeven? → Consider writing CCs</div></div>
+        <div class="c-sub" onclick="ck(this)"><div class="c-box"><span class="c-check">✓</span></div><div class="c-text">RSI ≥70 → ATM CC 7-10 DTE; RSI &lt;70 → OTM CC 15-30 DTE (target 5% premium + 20% on stock)</div></div>
+        <div class="c-item" onclick="ck(this)"><div class="c-box"><span class="c-check">✓</span></div><div class="c-text">Assigned? → Write CC for profit or breakeven + premium</div></div>
+      </div>
+    </div>
+
+    <div class="section" id="s-excc">
+      <div class="section-hdr" onclick="toggleSec('s-excc')">
+        <div class="section-hdr-left"><span class="section-hdr-icon">📞</span><span class="section-hdr-title">EXISTING COVERED CALLS</span></div>
+        <span class="chevron">▾</span>
+      </div>
+      <div class="section-body">
+        <div class="c-item" onclick="ck(this)"><div class="c-box"><span class="c-check">✓</span></div><div class="c-text">Any CC at ≥70% profit quickly? → Close and write a new CC when stock recovers</div></div>
+        <div class="c-item" onclick="ck(this)"><div class="c-box"><span class="c-check">✓</span></div><div class="c-text">Green day? → Check Scanner for stocks to write new CCs on (~50% coverage only)</div></div>
+      </div>
+    </div>
+
+    <div class="section" id="s-newtrades">
+      <div class="section-hdr" onclick="toggleSec('s-newtrades')">
+        <div class="section-hdr-left"><span class="section-hdr-icon">🔥</span><span class="section-hdr-title">NEW TRADE OPPORTUNITIES</span></div>
+        <span class="chevron">▾</span>
+      </div>
+      <div class="section-body">
+        <div class="c-item" onclick="ck(this)"><div class="c-box"><span class="c-check">✓</span></div><div class="c-text">Run Scanner → Review flagged CSP / CC / Alert candidates</div></div>
+        <div class="c-item" onclick="ck(this)"><div class="c-box"><span class="c-check">✓</span></div><div class="c-text">Only consider tickers comfortable to own for months if assigned</div></div>
+        <div class="c-item" onclick="ck(this)"><div class="c-box"><span class="c-check">✓</span></div><div class="c-text">Priority: Multi-stock ETFs → Mega Caps → Single Stock ETFs → Flex</div></div>
+        <div class="c-item" onclick="ck(this)"><div class="c-box"><span class="c-check">✓</span></div><div class="c-text">Scan WaveTrend Oscillator 8hr for momentum entries (green line crossing above red dots)</div></div>
+        <div class="c-sub" onclick="ck(this)"><div class="c-box"><span class="c-check">✓</span></div><div class="c-text">Confirm: RSI ≤50, bullish clouds, sweeps, 15%+ off recent high</div></div>
+        <div class="c-item" onclick="ck(this)"><div class="c-box"><span class="c-check">✓</span></div><div class="c-text">Research new companies → Add promising ones to watchlist</div></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ===== WEEKLY ===== -->
+  <div class="panel" id="panel-weekly">
+
+    <div class="section" id="s-weekly">
+      <div class="section-hdr" onclick="toggleSec('s-weekly')">
+        <div class="section-hdr-left"><span class="section-hdr-icon">📆</span><span class="section-hdr-title">WEEKLY TASKS</span></div>
+        <span class="chevron">▾</span>
+      </div>
+      <div class="section-body">
+        <div class="c-item" onclick="ck(this)"><div class="c-box"><span class="c-check">✓</span></div><div class="c-text">Update key levels on all watchlist stocks</div></div>
+        <div class="c-item" onclick="ck(this)"><div class="c-box"><span class="c-check">✓</span></div><div class="c-text">Update levels on SPY, QQQ, Bitcoin</div></div>
+        <div class="c-item" onclick="ck(this)"><div class="c-box"><span class="c-check">✓</span></div><div class="c-text">Check economic calendar for the week ahead</div></div>
+        <div class="c-item" onclick="ck(this)"><div class="c-box"><span class="c-check">✓</span></div><div class="c-text">Review Portfolio Allocation Framework</div></div>
+        <div class="c-item" onclick="ck(this)"><div class="c-box"><span class="c-check">✓</span></div><div class="c-text">Review portfolio balance: CSPs vs stocks vs cash %</div></div>
+        <div class="c-item" onclick="ck(this)"><div class="c-box"><span class="c-check">✓</span></div><div class="c-text">Refresh watchlist — remove stale ideas, add new candidates</div></div>
+      </div>
+    </div>
+
+    <div class="section" id="s-monthly">
+      <div class="section-hdr" onclick="toggleSec('s-monthly')">
+        <div class="section-hdr-left"><span class="section-hdr-icon">🗓️</span><span class="section-hdr-title">MONTHLY TASKS</span></div>
+        <span class="chevron">▾</span>
+      </div>
+      <div class="section-body">
+        <div class="c-item" onclick="ck(this)"><div class="c-box"><span class="c-check">✓</span></div><div class="c-text">Check Isabelnet S&P 500 month-by-month seasonality</div></div>
+        <div class="c-item" onclick="ck(this)"><div class="c-box"><span class="c-check">✓</span></div><div class="c-text">Check Equity Clock S&P seasonal chart</div></div>
+        <div class="c-item" onclick="ck(this)"><div class="c-box"><span class="c-check">✓</span></div><div class="c-text">Check overall indexes/sectors seasonality (equityclock.com)</div></div>
+        <div class="c-item" onclick="ck(this)"><div class="c-box"><span class="c-check">✓</span></div><div class="c-text">Review presidential cycle (year 1/2/3/4)</div></div>
+        <div class="c-item" onclick="ck(this)"><div class="c-box"><span class="c-check">✓</span></div><div class="c-text">Decide next month's stance: Aggressive / Normal / Defensive / Cash</div></div>
+      </div>
+    </div>
+
+  </div>
+
+</div><!-- /main -->
+
+<!-- ADD / EDIT HOLDING MODAL -->
+<div class="modal-overlay hidden" id="modalOverlay" onclick="closeModalOutside(event)">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal()">✕</button>
+    <div class="modal-title" id="modalTitle">ADD HOLDING</div>
+
+    <!-- Type tabs -->
+    <div class="type-tabs">
+      <button class="type-tab stock" id="ttStock" onclick="setModalType('stock')">STOCK</button>
+      <button class="type-tab csp"   id="ttCSP"   onclick="setModalType('csp')">CSP</button>
+      <button class="type-tab cc"    id="ttCC"    onclick="setModalType('cc')">COVERED CALL</button>
+    </div>
+
+    <!-- Common -->
+    <div class="form-group">
+      <label class="form-label">Ticker Symbol</label>
+      <input class="form-input" id="fTicker" placeholder="e.g. NVDA" style="text-transform:uppercase">
+    </div>
+
+    <!-- STOCK fields -->
+    <div class="stock-fields" id="stockFields">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Shares</label>
+          <input class="form-input" id="fShares" type="number" placeholder="100">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Cost Basis (per share)</label>
+          <input class="form-input" id="fCostBasis" type="number" step="0.01" placeholder="150.00">
+        </div>
+      </div>
+    </div>
+
+    <!-- CSP fields -->
+    <div class="csp-fields" id="cspFields">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Strike Price</label>
+          <input class="form-input" id="fCspStrike" type="number" step="0.5" placeholder="140.00">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Expiry Date</label>
+          <input class="form-input" id="fCspExpiry" type="date">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Premium Received (per contract)</label>
+          <input class="form-input" id="fCspPremium" type="number" step="0.01" placeholder="4.50">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Contracts</label>
+          <input class="form-input" id="fCspContracts" type="number" placeholder="1">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Current Premium (to track P&L)</label>
+        <input class="form-input" id="fCspCurrent" type="number" step="0.01" placeholder="2.25">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Status</label>
+        <select class="form-select" id="fCspStatus">
+          <option value="open">Open</option>
+          <option value="closed">Closed</option>
+          <option value="assigned">Assigned</option>
+          <option value="rolled">Rolled</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- CC fields -->
+    <div class="cc-fields" id="ccFields">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Strike Price</label>
+          <input class="form-input" id="fCcStrike" type="number" step="0.5" placeholder="200.00">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Expiry Date</label>
+          <input class="form-input" id="fCcExpiry" type="date">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Premium Received (per contract)</label>
+          <input class="form-input" id="fCcPremium" type="number" step="0.01" placeholder="3.20">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Contracts</label>
+          <input class="form-input" id="fCcContracts" type="number" placeholder="1">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Current Premium (to track P&L)</label>
+        <input class="form-input" id="fCcCurrent" type="number" step="0.01" placeholder="1.60">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Status</label>
+        <select class="form-select" id="fCcStatus">
+          <option value="open">Open</option>
+          <option value="closed">Closed</option>
+          <option value="exercised">Exercised</option>
+          <option value="rolled">Rolled</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Notes (all types) -->
+    <div class="form-group">
+      <label class="form-label">Notes</label>
+      <input class="form-input" id="fNotes" placeholder="Optional notes…">
+    </div>
+
+    <div class="form-actions">
+      <button class="form-cancel" onclick="closeModal()">CANCEL</button>
+      <button class="form-save" onclick="saveHolding()">SAVE HOLDING</button>
+    </div>
+  </div>
+</div>
+
+<div class="footer">
+  <div class="footer-label">DAILY PROGRESS</div>
+  <div class="footer-bar"><div class="footer-fill" id="footerFill" style="width:0%"></div></div>
+  <div class="footer-pct" id="footerPct">0%</div>
+  <button class="footer-reset" onclick="resetChecklist()">↺ RESET</button>
+</div>
+
+<script>
+// ============================================================
+// CONFIG
+// ============================================================
+const API_URL = 'https://api.anthropic.com/v1/messages';
+const MODEL   = 'claude-sonnet-4-20250514';
+
+// ============================================================
+// DATE
+// ============================================================
+const DAYS   = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const now    = new Date();
+document.getElementById('datePill').textContent =
+  `${DAYS[now.getDay()].slice(0,3).toUpperCase()} ${MONTHS[now.getMonth()]} ${now.getDate()}`;
+
+// ============================================================
+// TABS
+// ============================================================
+function switchTab(btn){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('panel-'+btn.dataset.panel).classList.add('active');
+}
+
+// ============================================================
+// SECTION COLLAPSE
+// ============================================================
+function toggleSec(id){ document.getElementById(id).classList.toggle('collapsed'); }
+
+// ============================================================
+// CHECKLIST
+// ============================================================
+const CK_KEY = 'trading_ck_v2';
+let ckState = {};
+try{ ckState = JSON.parse(localStorage.getItem(CK_KEY))||{}; }catch(e){}
+let ckIdx = 0;
+document.querySelectorAll('.c-item,.c-sub').forEach(el=>{
+  const id='ck_'+(ckIdx++);
+  el.dataset.id=id;
+  if(ckState[id]) el.classList.add('done');
+});
+function ck(el){
+  el.classList.toggle('done');
+  ckState[el.dataset.id]=el.classList.contains('done');
+  try{localStorage.setItem(CK_KEY,JSON.stringify(ckState));}catch(e){}
+  updateFooter();
+}
+function updateFooter(){
+  const all=document.querySelectorAll('.c-item,.c-sub').length;
+  const done=document.querySelectorAll('.c-item.done,.c-sub.done').length;
+  const pct=all>0?Math.round(done/all*100):0;
+  document.getElementById('footerFill').style.width=pct+'%';
+  document.getElementById('footerPct').textContent=pct+'%';
+}
+function resetChecklist(){
+  if(!confirm('Reset all checklist items?')) return;
+  document.querySelectorAll('.c-item.done,.c-sub.done').forEach(el=>el.classList.remove('done'));
+  ckState={};
+  try{localStorage.setItem(CK_KEY,JSON.stringify(ckState));}catch(e){}
+  updateFooter();
+}
+updateFooter();
+
+// ============================================================
+// WATCHLIST
+// ============================================================
+const WL_KEY='trading_watchlist_v1';
+let watchlist=[];
+try{ watchlist=JSON.parse(localStorage.getItem(WL_KEY))||[]; }catch(e){}
+if(!watchlist.length) watchlist=['SPY','QQQ','AAPL','NVDA','TSLA','MSFT','AMZN'];
+saveWatchlist();
+
+function saveWatchlist(){ try{localStorage.setItem(WL_KEY,JSON.stringify(watchlist));}catch(e){} renderPills(); }
+
+function renderPills(){
+  const c=document.getElementById('watchlistPills');
+  c.innerHTML='';
+  watchlist.forEach(t=>{
+    const p=document.createElement('div');
+    p.className='w-pill';
+    p.innerHTML=`${t} <span class="w-pill-del" onclick="removeTicker('${t}')">✕</span>`;
+    c.appendChild(p);
+  });
+}
+
+function addTicker(){
+  const inp=document.getElementById('tickerInput');
+  const t=inp.value.trim().toUpperCase().replace(/[^A-Z0-9]/g,'');
+  if(!t) return;
+  if(!watchlist.includes(t)) watchlist.push(t);
+  inp.value='';
+  saveWatchlist();
+}
+
+function removeTicker(t){
+  watchlist=watchlist.filter(x=>x!==t);
+  saveWatchlist();
+}
+renderPills();
+
+// ============================================================
+// CLAUDE API CALL
+// ============================================================
+async function callClaude(messages, system='', useSearch=false){
+  const body={ model:MODEL, max_tokens:1000, messages };
+  if(system) body.system=system;
+  if(useSearch) body.tools=[{type:'web_search_20250305',name:'web_search'}];
+  const res=await fetch(API_URL,{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(body)
+  });
+  if(!res.ok) throw new Error('API error '+res.status);
+  const data=await res.json();
+  return data.content.map(b=>b.type==='text'?b.text:'').join('');
+}
+
+// ============================================================
+// LOAD ALL (market data + strategy + calendar)
+// ============================================================
+async function loadAll(){
+  const btn=document.getElementById('refreshBtn');
+  btn.classList.add('spinning');
+  document.getElementById('liveStatus').textContent='LOADING';
+  document.getElementById('liveStatus').style.color='var(--gold)';
+
+  try{
+    await Promise.all([
+      loadMarketData(),
+      loadEconCalendar()
+    ]);
+    document.getElementById('lastUpdated').textContent=
+      'Updated '+new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+    document.getElementById('liveStatus').textContent='LIVE';
+    document.getElementById('liveStatus').style.color='var(--green)';
+  }catch(e){
+    console.error(e);
+    document.getElementById('liveStatus').textContent='ERROR';
+    document.getElementById('liveStatus').style.color='var(--red)';
+  }
+  btn.classList.remove('spinning');
+}
+
+// ============================================================
+// MARKET DATA + STRATEGY
+// ============================================================
+let marketData={};
+
+async function loadMarketData(){
+  // Set loading state
+  ['SPY','QQQ','VIX','BTC'].forEach(t=>{
+    const c=document.getElementById('card-'+t);
+    c.classList.add('loading');
+  });
+  document.getElementById('strategyBody').innerHTML=
+    'Analysing live market conditions…<span class="cursor"></span>';
+  document.getElementById('strategyBody').className='strategy-body loading';
+  document.getElementById('strategyTags').innerHTML='';
+
+  const prompt=`You are a financial data assistant. Search for the CURRENT live market data right now for today ${now.toDateString()}.
+
+For each of these: SPY, QQQ, VIX, BITCOIN (BTC)
+Provide:
+- Current price
+- Today's % change
+- Daily RSI (14-period estimate based on recent price action)
+- Weekly RSI estimate
+- Average RSI (daily+weekly average)
+- Brief 1-sentence market note
+
+Also provide:
+- Overall market mood: BULLISH / BEARISH / CHOPPY / NEUTRAL
+- A concise 3-4 sentence trading strategy recommendation for today based on the Sas system rules:
+  * RSI <35 avg = ATM CSPs 30-100 DTE, no CCs
+  * RSI 35-65 avg = OTM CSPs/CCs 7-30 DTE
+  * RSI >65 avg = No CSPs, ATM CCs 7-30 DTE
+  * Red day = look for CSP entries; Green day = look for CC entries
+- 3-5 short action tags (e.g. "LOOK FOR CSPS", "AVOID CCS", "STAY DEFENSIVE")
+
+Respond ONLY in this exact JSON format, no markdown:
+{
+  "SPY": {"price":"593.21","change":"+0.42%","changeSign":"+","dailyRSI":58,"weeklyRSI":62,"avgRSI":60,"note":"Holding near highs"},
+  "QQQ": {"price":"511.40","change":"-0.18%","changeSign":"-","dailyRSI":55,"weeklyRSI":60,"avgRSI":57.5,"note":"Tech slightly weak"},
+  "VIX": {"price":"14.2","change":"-3.1%","changeSign":"-","dailyRSI":35,"weeklyRSI":38,"avgRSI":36.5,"note":"Low fear"},
+  "BTC": {"price":"87400","change":"+1.2%","changeSign":"+","dailyRSI":62,"weeklyRSI":65,"avgRSI":63.5,"note":"Momentum building"},
+  "mood":"BULLISH",
+  "strategy":"Markets are trending bullish with SPY holding near highs and VIX suppressed. Average RSI on major indexes is in the 55-65 range suggesting OTM CSPs on red days with 7-30 DTE. Avoid aggressive CSPs until we see a meaningful pullback. Green days are good for writing OTM covered calls at least 20% above cost basis.",
+  "tags":["OTM CSPS 7-30 DTE","OTM CCS ON GREEN","WATCH FOR PULLBACK","RSI NEUTRAL ZONE"]
+}`;
+
+  const raw=await callClaude(
+    [{role:'user',content:prompt}],
+    'You are a precise financial data assistant. Always respond with valid JSON only.',
+    true
+  );
+
+  let d;
+  try{
+    const clean=raw.replace(/```json|```/g,'').trim();
+    d=JSON.parse(clean);
+  }catch(e){
+    // try to extract JSON
+    const m=raw.match(/\{[\s\S]*\}/);
+    if(m) d=JSON.parse(m[0]);
+    else throw new Error('JSON parse failed');
+  }
+
+  marketData=d;
+  renderHoldings(); // refresh stock P&L with live prices
+
+  // Render cards
+  ['SPY','QQQ','VIX','BTC'].forEach(t=>{
+    const info=d[t];
+    if(!info) return;
+    const card=document.getElementById('card-'+t);
+    card.classList.remove('loading');
+    const avg=info.avgRSI||((info.dailyRSI+info.weeklyRSI)/2);
+    const dir=info.changeSign==='+' ? 'bull' : info.changeSign==='-' ? 'bear' : 'neutral';
+    card.className='mkt-card '+dir;
+    const rsiClass=avg<35?'oversold':avg>65?'overbought':'neutral';
+    const rsiLabel=avg<35?'OVERSOLD':avg>65?'OVERBOUGHT':'NEUTRAL';
+    card.innerHTML=`
+      <div class="mkt-ticker">${t}</div>
+      <div class="mkt-price" style="color:${info.changeSign==='+'?'var(--green)':info.changeSign==='-'?'var(--red)':'var(--text)'}">${info.price}</div>
+      <div class="mkt-change ${info.changeSign==='+'?'pos':'neg'}">${info.change}</div>
+      <div class="mkt-rsi-row">
+        <span class="rsi-badge ${rsiClass}">${rsiLabel}</span>
+        <span class="rsi-num">RSI ${avg.toFixed(0)}</span>
+      </div>
+      <div style="font-size:10px;color:var(--muted);margin-top:4px;font-family:var(--font-mono)">${info.note||''}</div>`;
+  });
+
+  // Strategy
+  const sb=document.getElementById('strategyBody');
+  sb.className='strategy-body';
+  sb.textContent=d.strategy||'No strategy generated.';
+
+  const st=document.getElementById('strategyTags');
+  st.innerHTML='';
+  (d.tags||[]).forEach(tag=>{
+    const lower=tag.toLowerCase();
+    const cls=lower.includes('avoid')||lower.includes('defensive')||lower.includes('cash')?'red':
+               lower.includes('cc')?'gold':'green';
+    const span=document.createElement('span');
+    span.className=`stag ${cls}`;
+    span.textContent=tag;
+    st.appendChild(span);
+  });
+}
+
+// ============================================================
+// ECON CALENDAR
+// ============================================================
+async function loadEconCalendar(){
+  const body=document.getElementById('econBody');
+  body.innerHTML='<div class="econ-loading"><span class="spinner"></span>  Fetching events…</div>';
+
+  const dateStr=`${DAYS[now.getDay()]} ${MONTHS[now.getMonth()]} ${now.getDate()} ${now.getFullYear()}`;
+
+  const prompt=`Search for today's economic calendar events for ${dateStr}. List all significant US economic events/releases today.
+
+Respond ONLY in this JSON format (no markdown):
+{
+  "events": [
+    {"time":"8:30 AM ET","name":"Initial Jobless Claims","impact":"medium","forecast":"220K","prior":"218K"},
+    {"time":"10:00 AM ET","name":"Fed Chair Speech","impact":"high","forecast":"","prior":""}
+  ]
+}
+
+If no events today, return: {"events":[{"time":"—","name":"No major events today","impact":"low","forecast":"","prior":""}]}
+Impact must be: "high", "medium", or "low".`;
+
+  const raw=await callClaude(
+    [{role:'user',content:prompt}],
+    'You are a financial calendar assistant. Respond with valid JSON only.',
+    true
+  );
+
+  let d;
+  try{
+    const clean=raw.replace(/```json|```/g,'').trim();
+    d=JSON.parse(clean);
+  }catch(e){
+    const m=raw.match(/\{[\s\S]*\}/);
+    if(m) d=JSON.parse(m[0]);
+    else{ body.innerHTML='<div class="econ-loading">Could not load calendar data</div>'; return; }
+  }
+
+  if(!d.events||!d.events.length){
+    body.innerHTML='<div class="econ-loading">No events found</div>'; return;
+  }
+
+  body.innerHTML=d.events.map(ev=>`
+    <div class="econ-item">
+      <div class="econ-time">${ev.time}</div>
+      <div class="econ-impact ${ev.impact||'low'}"></div>
+      <div class="econ-name">${ev.name}</div>
+      <div class="econ-forecast">${ev.forecast?'F: '+ev.forecast:''} ${ev.prior?'P: '+ev.prior:''}</div>
+    </div>`).join('');
+}
+
+// ============================================================
+// SCANNER
+// ============================================================
+async function runScan(){
+  if(!watchlist.length){ alert('Add some tickers first!'); return; }
+
+  const resultsDiv=document.getElementById('scanResults');
+  resultsDiv.innerHTML=`<div class="section"><div class="section-body"><div class="scan-empty"><span class="spinner"></span>  Scanning ${watchlist.length} tickers…</div></div></div>`;
+
+  // Pull market context for better recommendations
+  const moodCtx=marketData.mood||'UNKNOWN';
+  const spyRSI=marketData.SPY?marketData.SPY.avgRSI:55;
+
+  const prompt=`You are a trading assistant using the Sas/John/Matt option selling system.
+
+Today's market context:
+- Overall mood: ${moodCtx}
+- SPY avg RSI: ${spyRSI}
+- Date: ${now.toDateString()}
+
+Search for CURRENT live data for these tickers: ${watchlist.join(', ')}
+
+For each ticker find:
+1. Current price
+2. Today's % change (is it down 5%+ today?)
+3. How far is it from its 52-week high? (is it 15%+ below recent high?)
+4. Daily RSI (14-period estimate)
+5. Weekly RSI estimate
+6. Average RSI
+
+Then apply these exact rules to generate signals:
+- avgRSI < 35 + red day → "ATM CSP 30-100 DTE" signal
+- avgRSI 35-65 + down 5%+ today → "OTM CSP 7-30 DTE" signal  
+- avgRSI 35-65 + green day → "OTM CC 7-30 DTE" signal (if stock owned)
+- avgRSI > 65 + green day → "ATM CC 7-30 DTE" signal
+- Down 5%+ today AND avgRSI < 50 → flag as "SCANNER ALERT"
+- Down 15%+ from recent high → flag as "WATCH"
+- avgRSI > 65 → flag "NO CSP"
+
+Respond ONLY in this JSON format (no markdown):
+{
+  "tickers": [
+    {
+      "symbol": "NVDA",
+      "price": "875.40",
+      "change": "-6.2%",
+      "changeSign": "-",
+      "dailyRSI": 38,
+      "weeklyRSI": 42,
+      "avgRSI": 40,
+      "fromHigh": "-18%",
+      "signal": "OTM CSP 7-30 DTE",
+      "flags": ["SCANNER ALERT","WATCH"],
+      "note": "Down sharply, near support. Good CSP candidate."
+    }
+  ]
+}`;
+
+  const raw=await callClaude(
+    [{role:'user',content:prompt}],
+    'You are a precise trading assistant. Respond with valid JSON only.',
+    true
+  );
+
+  let d;
+  try{
+    const clean=raw.replace(/```json|```/g,'').trim();
+    d=JSON.parse(clean);
+  }catch(e){
+    const m=raw.match(/\{[\s\S]*\}/);
+    if(m) d=JSON.parse(m[0]);
+    else{ resultsDiv.innerHTML='<div class="section"><div class="section-body"><div class="scan-empty">Scan failed — try again</div></div></div>'; return; }
+  }
+
+  const tickers=d.tickers||[];
+  if(!tickers.length){
+    resultsDiv.innerHTML='<div class="section"><div class="section-body"><div class="scan-empty">No results returned</div></div></div>'; return;
+  }
+
+  // Sort: alerts first, then by avgRSI asc
+  tickers.sort((a,b)=>{
+    const aAlert=(a.flags||[]).includes('SCANNER ALERT');
+    const bAlert=(b.flags||[]).includes('SCANNER ALERT');
+    if(aAlert&&!bAlert) return -1;
+    if(!aAlert&&bAlert) return 1;
+    return (a.avgRSI||50)-(b.avgRSI||50);
+  });
+
+  const rows=tickers.map(t=>{
+    const rsiClass=t.avgRSI<35?'oversold':t.avgRSI>65?'overbought':'neutral';
+    const flags=(t.flags||[]).map(f=>{
+      const cls=f==='SCANNER ALERT'?'alert':f==='WATCH'?'watch':f.includes('CSP')?'csp':f.includes('CC')?'cc':'watch';
+      return `<span class="flag ${cls}">${f}</span>`;
+    }).join('');
+    const signalColor=t.signal&&t.signal.includes('CSP')?'var(--green)':
+                      t.signal&&t.signal.includes('CC')?'var(--blue)':'var(--muted)';
+    return `<tr>
+      <td><span class="scan-ticker">${t.symbol}</span></td>
+      <td><span class="scan-price">${t.price}</span></td>
+      <td><span class="scan-chg ${t.changeSign==='+'?'pos':'neg'}">${t.change}</span></td>
+      <td><span class="scan-rsi"><span class="rsi-badge ${rsiClass}" style="font-size:8px">${(t.avgRSI||0).toFixed(0)}</span></span></td>
+      <td style="color:var(--muted);font-family:var(--font-mono);font-size:10px">${t.fromHigh||'—'}</td>
+      <td><span class="scan-signal" style="color:${signalColor};font-size:11px">${t.signal||'—'}</span></td>
+      <td><div class="flag-row">${flags}</div></td>
+      <td style="color:var(--muted);font-size:11px;max-width:180px">${t.note||''}</td>
+    </tr>`;
+  }).join('');
+
+  resultsDiv.innerHTML=`
+    <div class="section">
+      <div class="section-hdr" style="cursor:default">
+        <span style="font-family:var(--font-head);font-size:15px;letter-spacing:1px">SCAN RESULTS — ${tickers.length} TICKERS</span>
+        <span style="font-family:var(--font-mono);font-size:10px;color:var(--muted)">${new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</span>
+      </div>
+      <div class="section-body" style="padding:0;overflow-x:auto">
+        <table class="scan-table">
+          <thead><tr>
+            <th>TICKER</th><th>PRICE</th><th>CHG%</th><th>AVG RSI</th><th>FROM HIGH</th><th>SIGNAL</th><th>FLAGS</th><th>NOTE</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+// ============================================================
+// HOLDINGS
+// ============================================================
+const H_KEY = 'trading_holdings_v1';
+let holdings = { stocks:[], csps:[], ccs:[] };
+try { holdings = JSON.parse(localStorage.getItem(H_KEY)) || { stocks:[], csps:[], ccs:[] }; } catch(e){}
+if(!holdings.stocks) holdings.stocks=[];
+if(!holdings.csps)   holdings.csps=[];
+if(!holdings.ccs)    holdings.ccs=[];
+
+let modalType = 'stock';
+let editId = null;
+
+function saveHoldingsStore(){
+  try{ localStorage.setItem(H_KEY, JSON.stringify(holdings)); }catch(e){}
+}
+
+function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
+
+// ---- MODAL ----
+function openModal(type, id=null){
+  modalType = type;
+  editId = id;
+  clearModal();
+  setModalType(type);
+  document.getElementById('modalTitle').textContent = (id ? 'EDIT' : 'ADD') + ' HOLDING';
+  if(id){
+    const arr = type==='stock' ? holdings.stocks : type==='csp' ? holdings.csps : holdings.ccs;
+    const h = arr.find(x=>x.id===id);
+    if(h) fillModal(type, h);
+  }
+  document.getElementById('modalOverlay').classList.remove('hidden');
+}
+
+function closeModal(){ document.getElementById('modalOverlay').classList.add('hidden'); editId=null; }
+function closeModalOutside(e){ if(e.target===document.getElementById('modalOverlay')) closeModal(); }
+
+function setModalType(t){
+  modalType=t;
+  ['stock','csp','cc'].forEach(x=>{
+    document.getElementById('tt'+x.charAt(0).toUpperCase()+x.slice(1)).classList.toggle('active', x===t);
+    document.getElementById(x+'Fields').classList.toggle('show', x===t);
+  });
+  document.getElementById('ttCSP').classList.toggle('active', t==='csp');
+  document.getElementById('cspFields').classList.toggle('show', t==='csp');
+}
+
+function clearModal(){
+  ['fTicker','fShares','fCostBasis','fCspStrike','fCspPremium','fCspContracts','fCspCurrent',
+   'fCcStrike','fCcPremium','fCcContracts','fCcCurrent','fNotes'].forEach(id=>{
+    const el=document.getElementById(id); if(el) el.value='';
+  });
+  const ed=document.getElementById('fCspExpiry'); if(ed) ed.value='';
+  const ec=document.getElementById('fCcExpiry'); if(ec) ec.value='';
+}
+
+function fillModal(type, h){
+  document.getElementById('fTicker').value = h.ticker||'';
+  document.getElementById('fNotes').value  = h.notes||'';
+  if(type==='stock'){
+    document.getElementById('fShares').value    = h.shares||'';
+    document.getElementById('fCostBasis').value = h.costBasis||'';
+  } else if(type==='csp'){
+    document.getElementById('fCspStrike').value    = h.strike||'';
+    document.getElementById('fCspExpiry').value    = h.expiry||'';
+    document.getElementById('fCspPremium').value   = h.premium||'';
+    document.getElementById('fCspContracts').value = h.contracts||'';
+    document.getElementById('fCspCurrent').value   = h.current||'';
+    document.getElementById('fCspStatus').value    = h.status||'open';
+  } else {
+    document.getElementById('fCcStrike').value    = h.strike||'';
+    document.getElementById('fCcExpiry').value    = h.expiry||'';
+    document.getElementById('fCcPremium').value   = h.premium||'';
+    document.getElementById('fCcContracts').value = h.contracts||'';
+    document.getElementById('fCcCurrent').value   = h.current||'';
+    document.getElementById('fCcStatus').value    = h.status||'open';
+  }
+}
+
+function saveHolding(){
+  const ticker = document.getElementById('fTicker').value.trim().toUpperCase();
+  if(!ticker){ alert('Please enter a ticker.'); return; }
+  const notes = document.getElementById('fNotes').value.trim();
+
+  let obj = { id: editId||uid(), ticker, notes };
+
+  if(modalType==='stock'){
+    obj.shares    = parseFloat(document.getElementById('fShares').value)||0;
+    obj.costBasis = parseFloat(document.getElementById('fCostBasis').value)||0;
+    if(editId){ const i=holdings.stocks.findIndex(x=>x.id===editId); if(i>-1) holdings.stocks[i]=obj; }
+    else holdings.stocks.push(obj);
+  } else if(modalType==='csp'){
+    obj.strike    = parseFloat(document.getElementById('fCspStrike').value)||0;
+    obj.expiry    = document.getElementById('fCspExpiry').value||'';
+    obj.premium   = parseFloat(document.getElementById('fCspPremium').value)||0;
+    obj.contracts = parseInt(document.getElementById('fCspContracts').value)||1;
+    obj.current   = parseFloat(document.getElementById('fCspCurrent').value)||0;
+    obj.status    = document.getElementById('fCspStatus').value||'open';
+    if(editId){ const i=holdings.csps.findIndex(x=>x.id===editId); if(i>-1) holdings.csps[i]=obj; }
+    else holdings.csps.push(obj);
+  } else {
+    obj.strike    = parseFloat(document.getElementById('fCcStrike').value)||0;
+    obj.expiry    = document.getElementById('fCcExpiry').value||'';
+    obj.premium   = parseFloat(document.getElementById('fCcPremium').value)||0;
+    obj.contracts = parseInt(document.getElementById('fCcContracts').value)||1;
+    obj.current   = parseFloat(document.getElementById('fCcCurrent').value)||0;
+    obj.status    = document.getElementById('fCcStatus').value||'open';
+    if(editId){ const i=holdings.ccs.findIndex(x=>x.id===editId); if(i>-1) holdings.ccs[i]=obj; }
+    else holdings.ccs.push(obj);
+  }
+  saveHoldingsStore();
+  closeModal();
+  renderHoldings();
+}
+
+function deleteHolding(type, id){
+  if(!confirm('Delete this holding?')) return;
+  if(type==='stock')  holdings.stocks = holdings.stocks.filter(x=>x.id!==id);
+  else if(type==='csp') holdings.csps = holdings.csps.filter(x=>x.id!==id);
+  else holdings.ccs = holdings.ccs.filter(x=>x.id!==id);
+  saveHoldingsStore();
+  renderHoldings();
+}
+
+// ---- DTE helper ----
+function dte(expiryStr){
+  if(!expiryStr) return '—';
+  const d = Math.ceil((new Date(expiryStr+'T00:00:00')-new Date())/(1000*60*60*24));
+  if(d<0) return '<span style="color:var(--red)">EXPIRED</span>';
+  if(d===0) return '<span style="color:var(--red)">TODAY</span>';
+  return d+'d';
+}
+
+// ---- P&L helpers ----
+function optionPnlPct(premium, current){
+  if(!premium||premium===0) return null;
+  return ((premium-current)/premium)*100;
+}
+
+function stockPnlPct(costBasis, currentPrice){
+  if(!costBasis||costBasis===0) return null;
+  return ((currentPrice-costBasis)/costBasis)*100;
+}
+
+function pnlSpan(pct){
+  if(pct===null||isNaN(pct)) return '<span class="h-pnl flat">—</span>';
+  const cls = pct>0?'pos':pct<0?'neg':'flat';
+  const sign = pct>0?'+':'';
+  return `<span class="h-pnl ${cls}">${sign}${pct.toFixed(1)}%</span>`;
+}
+
+function statusBadge(s){
+  const map={open:'var(--green)',closed:'var(--muted)',assigned:'var(--blue)',exercised:'var(--blue)',rolled:'var(--gold)'};
+  return `<span style="font-family:var(--font-mono);font-size:9px;color:${map[s]||'var(--muted)'};text-transform:uppercase">${s||'open'}</span>`;
+}
+
+// ---- RENDER ----
+function renderHoldings(){
+  // Stocks
+  const sb = document.getElementById('stocksBody');
+  if(!holdings.stocks.length){
+    sb.innerHTML=`<tr><td colspan="7"><div class="h-empty">No stock positions yet.<br>Click + ADD STOCK to get started.</div></td></tr>`;
+  } else {
+    sb.innerHTML = holdings.stocks.map(h=>{
+      const pct = h.costBasis ? null : null; // will update live if market data available
+      const livePrice = getMarketPrice(h.ticker);
+      const pnl = livePrice ? pnlSpan(stockPnlPct(h.costBasis, livePrice)) : pnlSpan(null);
+      const livePriceStr = livePrice ? `<span style="font-family:var(--font-mono);font-size:11px;color:var(--text)">$${livePrice}</span>` : '<span style="color:var(--muted)">—</span>';
+      return `<tr>
+        <td><span class="h-ticker">${h.ticker}</span></td>
+        <td style="font-family:var(--font-mono);font-size:11px">${h.shares||'—'}</td>
+        <td style="font-family:var(--font-mono);font-size:11px">${h.costBasis?'$'+h.costBasis.toFixed(2):'—'}</td>
+        <td>${livePriceStr}</td>
+        <td>${pnl}</td>
+        <td style="color:var(--muted);font-size:11px;max-width:140px">${h.notes||''}</td>
+        <td><div class="h-actions">
+          <button class="h-btn" onclick="openModal('stock','${h.id}')">EDIT</button>
+          <button class="h-btn del" onclick="deleteHolding('stock','${h.id}')">DEL</button>
+        </div></td>
+      </tr>`;
+    }).join('');
+  }
+
+  // CSPs
+  const cb = document.getElementById('cspsBody');
+  if(!holdings.csps.length){
+    cb.innerHTML=`<tr><td colspan="9"><div class="h-empty">No CSP positions yet.<br>Click + ADD CSP to track open puts.</div></td></tr>`;
+  } else {
+    cb.innerHTML = holdings.csps.map(h=>{
+      const collatPer = h.strike * 100;
+      const totalCollat = collatPer * h.contracts;
+      const pnlPct = optionPnlPct(h.premium, h.current);
+      const totalPremium = (h.premium*100*h.contracts).toFixed(0);
+      return `<tr>
+        <td><span class="h-ticker">${h.ticker}</span></td>
+        <td style="font-family:var(--font-mono);font-size:11px">$${h.strike}</td>
+        <td style="font-family:var(--font-mono);font-size:11px">${h.expiry||'—'} <span style="color:var(--muted)">(${dte(h.expiry)} DTE)</span></td>
+        <td style="font-family:var(--font-mono);font-size:11px">$${h.premium} <span style="color:var(--muted);font-size:9px">($${totalPremium} total)</span></td>
+        <td style="font-family:var(--font-mono);font-size:11px">$${totalCollat.toLocaleString()}</td>
+        <td>${pnlSpan(pnlPct)}</td>
+        <td>${statusBadge(h.status)}</td>
+        <td style="color:var(--muted);font-size:11px;max-width:120px">${h.notes||''}</td>
+        <td><div class="h-actions">
+          <button class="h-btn" onclick="openModal('csp','${h.id}')">EDIT</button>
+          <button class="h-btn del" onclick="deleteHolding('csp','${h.id}')">DEL</button>
+        </div></td>
+      </tr>`;
+    }).join('');
+  }
+
+  // CCs
+  const ccb = document.getElementById('ccsBody');
+  if(!holdings.ccs.length){
+    ccb.innerHTML=`<tr><td colspan="9"><div class="h-empty">No covered call positions yet.<br>Click + ADD CC to track open calls.</div></td></tr>`;
+  } else {
+    ccb.innerHTML = holdings.ccs.map(h=>{
+      const totalPremium = (h.premium*100*h.contracts).toFixed(0);
+      const pnlPct = optionPnlPct(h.premium, h.current);
+      return `<tr>
+        <td><span class="h-ticker">${h.ticker}</span></td>
+        <td style="font-family:var(--font-mono);font-size:11px">$${h.strike}</td>
+        <td style="font-family:var(--font-mono);font-size:11px">${h.expiry||'—'} <span style="color:var(--muted)">(${dte(h.expiry)} DTE)</span></td>
+        <td style="font-family:var(--font-mono);font-size:11px">$${h.premium} <span style="color:var(--muted);font-size:9px">($${totalPremium} total)</span></td>
+        <td style="font-family:var(--font-mono);font-size:11px">${h.contracts}</td>
+        <td>${pnlSpan(pnlPct)}</td>
+        <td>${statusBadge(h.status)}</td>
+        <td style="color:var(--muted);font-size:11px;max-width:120px">${h.notes||''}</td>
+        <td><div class="h-actions">
+          <button class="h-btn" onclick="openModal('cc','${h.id}')">EDIT</button>
+          <button class="h-btn del" onclick="deleteHolding('cc','${h.id}')">DEL</button>
+        </div></td>
+      </tr>`;
+    }).join('');
+  }
+
+  // Summary cards
+  const openCSPs  = holdings.csps.filter(x=>x.status==='open').length;
+  const openCCs   = holdings.ccs.filter(x=>x.status==='open').length;
+  const totalCollat = holdings.csps.filter(x=>x.status==='open')
+    .reduce((sum,h)=>sum+(h.strike*100*(h.contracts||1)),0);
+  const totalPremIncome = [
+    ...holdings.csps.filter(x=>x.status==='open'),
+    ...holdings.ccs.filter(x=>x.status==='open')
+  ].reduce((sum,h)=>sum+(h.premium*100*(h.contracts||1)),0);
+
+  document.getElementById('holdingsSummary').innerHTML=`
+    <div class="h-sum-card">
+      <div class="h-sum-label">STOCK POSITIONS</div>
+      <div class="h-sum-val" style="color:var(--blue)">${holdings.stocks.length}</div>
+    </div>
+    <div class="h-sum-card">
+      <div class="h-sum-label">OPEN OPTIONS</div>
+      <div class="h-sum-val" style="color:var(--green)">${openCSPs} CSP · ${openCCs} CC</div>
+    </div>
+    <div class="h-sum-card">
+      <div class="h-sum-label">PREMIUM COLLECTED (OPEN)</div>
+      <div class="h-sum-val" style="color:var(--gold)">$${totalPremIncome.toLocaleString()}</div>
+    </div>`;
+}
+
+// Helper: get live price from marketData if available
+function getMarketPrice(ticker){
+  const t=ticker.toUpperCase();
+  if(marketData[t]&&marketData[t].price){
+    const p=parseFloat(marketData[t].price.replace(/,/g,''));
+    return isNaN(p)?null:p;
+  }
+  return null;
+}
+
+renderHoldings();
+
+// ============================================================
+// AUTO-LOAD ON START
+// ============================================================
+window.addEventListener('load', ()=>{ loadAll(); });
+</script>
+</body>
+</html>
